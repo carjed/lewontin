@@ -1,3 +1,4 @@
 manual_scrape_missing_dates.R
+figures/*.*
 data/*tweets.rds
 data/*tweets.rds.bak

@@ -6,6 +6,7 @@ library(tm)
 library(qlcMatrix)
 library(wordcloud)
 library(plotly)
+library(scales)
 
 # custom stopword list used in Carlson & Harris, 2020
 custom_stopwords <- c("https", "http", "tco", "gmailcom", "views", "love", "lover", "tweets",
@@ -52,7 +53,8 @@ if(file.exists("data/20200827-20200904_lewontin_tweets.rds")){
   
 # remove duplicate tweets in combined data, since scraping included overlapping date ranges
 rl_tweets_filtered <- rl_tweets %>% 
-  dplyr::filter(!grepl("2021-06|2021-07", created_at)) %>% # ignore data with timestamp in June, 2021
+  dplyr::filter(created_at < as.POSIXct("2021-05-25")) %>% 
+  # dplyr::filter(!grepl("2021-06|2021-07", created_at)) %>% # ignore data with timestamp in June, 2021
   group_by(status_id) %>% 
   slice(1L)
 
@@ -84,20 +86,28 @@ rt_dat <- rl_tweets_filtered %>%
 # Fig. 4a: retweet timelines
 #-----------------------------------------------------------------------------
 
-rt_dat_plot <- rt_dat %>%
+fig4a <- rt_dat %>%
   ggplot(aes(x=as.Date(created_at), y=order, group=tweets, label=account))+
   geom_line(colour="grey80")+
   geom_point(aes(colour=rt, size=followers_count), alpha=0.5)+
   # scale_size(limits=c(0,0.5))+
   # scale_colour_manual(values=cols)+
-  scale_y_log10(breaks=c(1,11,101), labels=c(0,10,100))+
+  scale_y_log10(breaks=c(1,6,11,26,51,101), labels=c(0,5,10,25,50,100), expand=c(0.02,0))+
   #scale_x_date()+
   scale_x_date(breaks=date_breaks("2 week"))+ #as.Date(rt_dat$created_at[seq(1, nrow(rt_dat), 100)], "%Y-%m-%d"))+
   ylab("Retweet Number")+
+  ggtitle("a")+
   theme_classic()+
   theme(axis.title.x=element_blank(),
-        axis.text.x=element_text(size=6, angle=45, hjust=1),
-        legend.position="none")
+        axis.text.x = element_text(size=12, angle=45, hjust=1),
+        axis.text.y = element_text(size=12),
+        axis.title.y = element_text(size=16),
+        legend.position="none")+
+  NULL
+
+
+
+
 
 ggplotly(rt_dat_plot)
 
@@ -144,8 +154,27 @@ tweets_word_counts <- tweets_tokenized %>%
   mutate(word = text_to_emoji(word)) %>%
   dplyr::filter(n>=10)
 
-png("figures/tweet_wordcloud.png", width=6, height=6, units="in", res=300)
-wordcloud(words = tweets_word_counts$word,
+set.seed(42)
+
+tweets_word_counts %>%
+  arrange(desc(n)) %>%
+  head(150) %>%
+  ggplot(
+    aes(
+      label = word, 
+      size = n,
+      color = factor(ntile(n, 5))))+
+  # scale_colour_brewer(palette="Dark2", direction = -1)+
+  scale_colour_manual(values=brewer.pal(8, "Dark2")[c(1,2,3,5,8)])+
+  geom_text_wordcloud_area() +
+  scale_size_area(max_size = 24)+
+  theme_minimal()
+
+ ggwordcloud(tweets_word_counts$word, tweets_word_counts$n)
+
+
+ png("figures/tweet_wordcloud.png", width=6, height=6, units="in", res=300)
+fig4b <- wordcloud(words = tweets_word_counts$word,
           freq = tweets_word_counts$n,
           min.freq = 1,
           max.words=200,
@@ -154,6 +183,19 @@ wordcloud(words = tweets_word_counts$word,
           scale=c(3.5,0.2),
           colors=brewer.pal(8, "Dark2"))
 dev.off()
+
+
+img <- readPNG("figures/tweet_wordcloud.png")
+g <- rasterGrob(img, interpolate=TRUE)
+
+img <- image_read("figures/fig4b_v2.png")
+
+fig4b <- image_ggplot(img)+ggtitle("b")
+
+grid.arrange(
+  grobs = list(fig4a, fig4b),
+  widths = c(2, 1)
+)
 
 #-----------------------------------------------------------------------------
 # wordcloud of bios
@@ -231,3 +273,7 @@ wordcloud(words = tweets_og_word_counts$word,
           colors=brewer.pal(8, "Dark2"))
 dev.off()
 
+l1972_tweet_handles <- rt_dat %>% 
+  dplyr::filter(grepl("fallacy|diversity|race|racial|racism|racist|15%|85%|6.3%|variation", tolower(text))) %>% 
+  pull(screen_name) %>% 
+  unique
